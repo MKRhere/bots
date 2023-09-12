@@ -11,9 +11,11 @@ import {
 	searchSort,
 	sortCountryTZPairs,
 } from "./utils";
+import { getClock } from "./clocks";
 
-// Set the output to "04:35 (GMT+5:30) on Sep 12, 2023"
-const pattern = "HH:mm (z) 'on' MMM dd, yyyy";
+// Set the output to "04:35 on Sep 12, 2023"
+const pattern = "HH:mm 'on' MMM dd, yyyy";
+const pattern2 = "'GMT'XXX";
 
 interface Session {
 	recent: CountryTZ[];
@@ -46,26 +48,33 @@ bot.on("inline_query", async ctx => {
 			.sort(sortCountryTZPairs)
 			.sort(searchSort(query))
 			.slice(0, 50)
-			.map(([country, tz]): InlineQueryResultArticle => {
-				const title = `${country} (${tz})`;
-				const description = format(utcToZonedTime(date, tz), pattern);
-				const formatted = fmt`
+			.map(([country, timeZone]): InlineQueryResultArticle | undefined => {
+				try {
+					const title = `${country} (${timeZone})`;
+					const zoned = utcToZonedTime(date, timeZone);
+					const description = format(zoned, pattern, { timeZone });
+					const formatted = fmt`—————————— ${getClock(zoned)}
+					
 ${bold(title)}
+${format(zoned, pattern2, { timeZone })}
+
 ${code(description)}
 `;
 
-				return {
-					type: "article",
-					id: `${country}:${tz}`,
-					title,
-					description,
-					input_message_content: {
-						message_text: formatted.text,
-						entities: formatted.entities,
-					},
-				};
-			}),
-		{ cache_time: 0 },
+					return {
+						type: "article",
+						id: `${country}:${timeZone}`,
+						title,
+						description,
+						input_message_content: {
+							message_text: formatted.text,
+							entities: formatted.entities,
+						},
+					};
+				} catch {}
+			})
+			.filter((x): x is InlineQueryResultArticle => Boolean(x)),
+		{ cache_time: 30 },
 	);
 });
 
